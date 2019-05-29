@@ -224,7 +224,6 @@ namespace SimilarTagsCalculator {
             const int resultLength = 50;
             List<int> similarity = new List<int>();
             List<TagsGroup> result = new List<TagsGroup>();
-            List<int> indices = new List<int>();
             int i = 0;
             foreach (var tagsGroup in Groups) {
                 int similarityWithValue = TagsGroup.MeasureSimilarity(tagsGroup, value);
@@ -240,11 +239,9 @@ namespace SimilarTagsCalculator {
                 }
                 similarity.Insert(index, similarityWithValue);
                 result.Insert(index, tagsGroup);
-                indices.Insert(index, i);
                 if (similarity.Count > resultLength) {
                     similarity.RemoveAt(0);
                     result.RemoveAt(0);
-                    indices.RemoveAt(0);
                 }
                 i++;
             }
