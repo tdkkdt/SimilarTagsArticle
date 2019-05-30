@@ -51,7 +51,7 @@ namespace SimilarTagsCalculator {
     class Program {
         static Random rnd = new Random(31337);
         const int resultLength = 50;
-        const int groupsCount = 100000;        
+        const int testGroupCount = 100000;        
         
         static void Main() {
 #if DEBUG
@@ -68,13 +68,13 @@ namespace SimilarTagsCalculator {
         }
 
         static void RandomTest() {
-            TagsGroup[] groups = CreateRandomGroups(groupsCount);
+            TagsGroup[] groups = CreateRandomGroups(testGroupCount);
             TestCore(groups, new TagsGroup(GetRandomBools()), "Random test");
         }
 
         static void SpecialTest() {
-            TagsGroup[] groups = new TagsGroup[groupsCount];
-            for (int i = 0; i < groupsCount; i++) {
+            TagsGroup[] groups = new TagsGroup[testGroupCount];
+            for (int i = 0; i < testGroupCount; i++) {
                 groups[i] = new TagsGroup(GetRandomBools());
             }
             bool[] fullTagsGroup = CreateAllTagsTrue();
@@ -85,7 +85,7 @@ namespace SimilarTagsCalculator {
         }
 
         static void AscendantTest() {
-            TagsGroup[] groups = CreateAscendantTestGroups(groupsCount);
+            TagsGroup[] groups = CreateAscendantTestGroups(testGroupCount);
             TestCore(groups, new TagsGroup(CreateAllTagsTrue()), "Hard test");
         }
 
@@ -131,10 +131,7 @@ namespace SimilarTagsCalculator {
             int bucketsCount = groupsCount / TagsGroup.TagsGroupLength;
             int i = 0;
             for (int j = 0; j <= TagsGroup.TagsGroupLength && i < groupsCount; j++) {
-                bool[] tags = new bool[TagsGroup.TagsGroupLength];
-                for (int k = 0; k < j; k++) {
-                    tags[TagsGroup.TagsGroupLength - 1 - k] = true;
-                }
+                bool[] tags = GetRandomTrueBools(j);
                 for (int k = 0; k < bucketsCount && i < groupsCount; k++, i++) {
                     groups[i] = new TagsGroup(tags);
                 }
@@ -144,7 +141,29 @@ namespace SimilarTagsCalculator {
                 groups[i++] = new TagsGroup(fullTags);
             }
             return groups;
-        }        
+        }
+
+        static int[] indices;
+
+        static bool[] GetRandomTrueBools(int n) {
+            bool[] result = new bool[TagsGroup.TagsGroupLength];
+            if (indices == null) {
+                indices = new int[TagsGroup.TagsGroupLength];
+                for (int i = 0; i < TagsGroup.TagsGroupLength; i++) {
+                    indices[i] = i;
+                }
+            }
+            for (int i = 0; i < TagsGroup.TagsGroupLength; i++) {
+                int ti = rnd.Next(TagsGroup.TagsGroupLength);
+                int t = indices[i];
+                indices[i] = indices[ti];
+                indices[ti] = t;
+            }
+            for (int i = 0; i < n; i++) {
+                result[indices[i]] = true;
+            }
+            return result;
+        }
 
         internal static TagsGroup[] CreateDescendantTestGroups(int groupsCount) {
             TagsGroup[] groups = new TagsGroup[groupsCount];
