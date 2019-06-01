@@ -1,10 +1,4 @@
-﻿//|         Method |     Mean |    Error |   StdDev | Gen 0 | Gen 1 | Gen 2 | Allocated |
-//|--------------- |---------:|---------:|---------:|------:|------:|------:|----------:|
-//|     RandomTest | 17.536 s | 0.0249 s | 0.0221 s |     - |     - |     - |    2.8 KB |
-//|  AscendantTest |  3.543 s | 0.0229 s | 0.0214 s |     - |     - |     - |    2.8 KB |
-//| DescendantTest |  3.549 s | 0.0131 s | 0.0116 s |     - |     - |     - |    2.8 KB |
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using BenchmarkDotNet.Attributes;
@@ -22,8 +16,12 @@ namespace SimilarTagsCalculator {
         [GlobalSetup]
         public void GlobalSetup() {
             randomCalculator = new SimilarTagsCalculator(Program.CreateRandomGroups(1000000));
-            ascendantCalculator = new SimilarTagsCalculator(Program.CreateAscendantTestGroups(1000000));
-            descendantCalculator = new SimilarTagsCalculator(Program.CreateDescendantTestGroups(1000000));
+            TagsGroup[] ascendantTestGroups = Program.CreateAscendantTestGroups(1000000);
+            TagsGroup[] descendantTestGroups = new TagsGroup[ascendantTestGroups.Length];
+            Array.Copy(ascendantTestGroups, descendantTestGroups, ascendantTestGroups.Length);
+            Array.Reverse(descendantTestGroups);
+            ascendantCalculator = new SimilarTagsCalculator(ascendantTestGroups);
+            descendantCalculator = new SimilarTagsCalculator(descendantTestGroups);
             allTagsTrue = new TagsGroup(Program.CreateAllTagsTrue());
         }
 
@@ -48,6 +46,35 @@ namespace SimilarTagsCalculator {
         }
     }
 
+    public class BranchPredictionBenchmark {
+        TagsGroup[] unsortedGroups;
+        TagsGroup[] sortedGroups;
+        TagsGroup etalon;
+
+        [GlobalSetup]
+        public void GlobalSetup() {
+            unsortedGroups = Program.CreateRandomAscendantTestGroups(1000000);
+            sortedGroups = Program.CreateAscendantTestGroups(1000000);
+            etalon = new TagsGroup(Program.CreateAllTagsTrue());
+        }
+        
+        int GetSimilaritySum(TagsGroup[] tagsGroups) {
+            int result = 0;
+            foreach (TagsGroup tagsGroup in tagsGroups) {
+                result += TagsGroup.MeasureSimilarity(tagsGroup, etalon);
+            }
+            return result;
+        }
+
+        [Benchmark]
+        public int Sorted() => GetSimilaritySum(sortedGroups);
+
+
+        [Benchmark]
+        public int Unsorted() => GetSimilaritySum(unsortedGroups);
+
+    }
+
     class Program {
         static Random rnd = new Random(31337);
         const int resultLength = 50;
@@ -57,7 +84,7 @@ namespace SimilarTagsCalculator {
 #if DEBUG
             DoTests();
 #else
-            BenchmarkRunner.Run<Benchmark>();
+            BenchmarkRunner.Run<BranchPredictionBenchmark>();
 #endif
         }
 
@@ -85,7 +112,7 @@ namespace SimilarTagsCalculator {
         }
 
         static void AscendantTest() {
-            TagsGroup[] groups = CreateAscendantTestGroups(testGroupCount);
+            TagsGroup[] groups = CreateRandomAscendantTestGroups(testGroupCount);
             TestCore(groups, new TagsGroup(CreateAllTagsTrue()), "Hard test");
         }
 
@@ -126,7 +153,7 @@ namespace SimilarTagsCalculator {
             return groups;
         }
 
-        internal static TagsGroup[] CreateAscendantTestGroups(int groupsCount) {
+        internal static TagsGroup[] CreateRandomAscendantTestGroups(int groupsCount) {
             TagsGroup[] groups = new TagsGroup[groupsCount];
             int bucketsCount = groupsCount / TagsGroup.TagsGroupLength;
             int i = 0;
@@ -141,6 +168,31 @@ namespace SimilarTagsCalculator {
                 groups[i++] = new TagsGroup(fullTags);
             }
             return groups;
+        }
+
+        internal static TagsGroup[] CreateAscendantTestGroups(int groupsCount) {
+            TagsGroup[] groups = new TagsGroup[groupsCount];
+            int bucketsCount = groupsCount / TagsGroup.TagsGroupLength;
+            int i = 0;
+            for (int j = 0; j <= TagsGroup.TagsGroupLength && i < groupsCount; j++) {
+                bool[] tags = GetTrueBools(j);
+                for (int k = 0; k < bucketsCount && i < groupsCount; k++, i++) {
+                    groups[i] = new TagsGroup(tags);
+                }
+            }
+            var fullTags = CreateAllTagsTrue();
+            while (i < groupsCount) {
+                groups[i++] = new TagsGroup(fullTags);
+            }
+            return groups;
+        }
+
+        static bool[] GetTrueBools(int i) {
+            bool[] result = new bool[TagsGroup.TagsGroupLength];
+            for (int j = 0; j < i; j++) {
+                result[j] = true;
+            }
+            return result;
         }
 
         static int[] indices;
@@ -163,26 +215,6 @@ namespace SimilarTagsCalculator {
                 result[indices[i]] = true;
             }
             return result;
-        }
-
-        internal static TagsGroup[] CreateDescendantTestGroups(int groupsCount) {
-            TagsGroup[] groups = new TagsGroup[groupsCount];
-            int bucketsCount = groupsCount / TagsGroup.TagsGroupLength;
-            int i = groupsCount - 1;
-            for (int j = 0; j <= TagsGroup.TagsGroupLength && i >= 0; j++) {
-                bool[] tags = new bool[TagsGroup.TagsGroupLength];
-                for (int k = 0; k < j; k++) {
-                    tags[TagsGroup.TagsGroupLength - 1 - k] = true;
-                }
-                for (int k = 0; k < bucketsCount && i >= 0; k++, i--) {
-                    groups[i] = new TagsGroup(tags);
-                }
-            }
-            var fullTags = CreateAllTagsTrue();
-            while (i >= 0) {
-                groups[i--] = new TagsGroup(fullTags);
-            }
-            return groups;
         }
 
         internal static bool[] CreateAllTagsTrue() {
@@ -231,6 +263,46 @@ namespace SimilarTagsCalculator {
     }
 
     class SimilarTagsCalculator {
+        struct TagsSimilarityInfo : IComparable<TagsSimilarityInfo>, IComparable {
+            public int Index { get; }
+
+            public int Similarity { get; }
+
+            public TagsSimilarityInfo(int index, int similarity) {
+                Index = index;
+                Similarity = similarity;
+            }
+
+            public bool Equals(TagsSimilarityInfo other) {
+                return Index == other.Index && Similarity == other.Similarity;
+            }
+
+            public override bool Equals(object obj) {
+                return obj is TagsSimilarityInfo other && Equals(other);
+            }
+
+            public override int GetHashCode() {
+                unchecked {
+                    return (Index * 397) ^ Similarity;
+                }
+            }
+
+            public int CompareTo(TagsSimilarityInfo other) {
+                int similarityComparison = other.Similarity.CompareTo(Similarity);
+                return similarityComparison != 0 ? similarityComparison : Index.CompareTo(other.Index);
+            }
+
+            public int CompareTo(object obj) {
+                if (ReferenceEquals(null, obj))
+                    return 1;
+                return obj is TagsSimilarityInfo other ? CompareTo(other) : throw new ArgumentException($"Object must be of type {nameof(TagsSimilarityInfo)}");
+            }
+
+            public override string ToString() {
+                return $"Index: {Index.ToString()}; Similarity: {Similarity.ToString()}";
+            }
+        }
+
         TagsGroup[] Groups { get; }
 
         public SimilarTagsCalculator(TagsGroup[] groups) {
@@ -241,31 +313,25 @@ namespace SimilarTagsCalculator {
 
         public TagsGroup[] GetFiftyMostSimilarGroups(TagsGroup value) {
             const int resultLength = 50;
-            List<int> similarity = new List<int>();
-            List<TagsGroup> result = new List<TagsGroup>();
-            int i = 0;
-            foreach (var tagsGroup in Groups) {
-                int similarityWithValue = TagsGroup.MeasureSimilarity(tagsGroup, value);
-                int index = similarity.BinarySearch(similarityWithValue);
-                if (index < 0) {
-                    index = ~index;
+            List<TagsSimilarityInfo> list = new List<TagsSimilarityInfo>();
+            for (int groupIndex = 0; groupIndex < Groups.Length; groupIndex++) {
+                TagsGroup tagsGroup = Groups[groupIndex];
+                int similarityValue = TagsGroup.MeasureSimilarity(value, tagsGroup);
+                TagsSimilarityInfo newInfo = new TagsSimilarityInfo(groupIndex, similarityValue);
+                if (list.Count == resultLength && list[resultLength - 1].CompareTo(newInfo) == -1) {
+                    continue;
                 }
-                else {
-                    while (index >= 0 && similarity[index] == similarityWithValue) {
-                        index--;
-                    }
-                    index++;
+                int index = ~list.BinarySearch(newInfo);
+                list.Insert(index, newInfo);
+                if (list.Count > resultLength) {
+                    list.RemoveAt(resultLength);
                 }
-                similarity.Insert(index, similarityWithValue);
-                result.Insert(index, tagsGroup);
-                if (similarity.Count > resultLength) {
-                    similarity.RemoveAt(0);
-                    result.RemoveAt(0);
-                }
-                i++;
             }
-            result.Reverse();
-            return result.ToArray();
+            TagsGroup[] result = new TagsGroup[resultLength];
+            for (int i = 0; i < resultLength; i++) {
+                result[i] = Groups[list[i].Index];
+            }
+            return result;
         }
     }
 }
