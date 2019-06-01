@@ -84,7 +84,7 @@ namespace SimilarTagsCalculator {
 #if DEBUG
             DoTests();
 #else
-            BenchmarkRunner.Run<BranchPredictionBenchmark>();
+            BenchmarkRunner.Run<Benchmark>();
 #endif
         }
 
@@ -246,7 +246,7 @@ namespace SimilarTagsCalculator {
         public static int MeasureSimilarity(TagsGroup a, TagsGroup b) {
             int result = 0;
             for (int i = 0; i < TagsGroupLength; i++) {
-                if (a.InnerTags[i] == b.InnerTags[i])
+                if (a.InnerTags[i] && a.InnerTags[i] == b.InnerTags[i])
                     result++;
             }
             return result;
