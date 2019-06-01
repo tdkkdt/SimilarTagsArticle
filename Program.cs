@@ -84,14 +84,34 @@ namespace SimilarTagsCalculator {
 #if DEBUG
             DoTests();
 #else
-            BenchmarkRunner.Run<Benchmark>();
+            BenchmarkRunner.Run<BranchPredictionBenchmark>();
 #endif
         }
 
         static void DoTests() {
+            RandomMeasureSimilarityTest();
             RandomTest();
             SpecialTest();
             AscendantTest();
+        }
+
+        static void RandomMeasureSimilarityTest() {
+            for (int i = 0; i < 1000; i++) {
+                bool[] aBools = GetRandomBools();
+                bool[] bBools = GetRandomBools();
+                TagsGroup a = new TagsGroup(aBools);
+                TagsGroup b = new TagsGroup(bBools);
+                int similarity = TagsGroup.MeasureSimilarity(a, b);
+                int dummySimilarity = CalcSimilarityDummy(aBools, bBools);
+                if (similarity != dummySimilarity) {
+                    throw new Exception("Test failed");
+                }
+            }
+            Console.WriteLine("Measure similarity test passed");
+        }
+
+        static int CalcSimilarityDummy(bool[] aBools, bool[] bBools) {
+            return aBools.Where((t, i) => t && t == bBools[i]).Count();
         }
 
         static void RandomTest() {
@@ -246,7 +266,7 @@ namespace SimilarTagsCalculator {
         public static int MeasureSimilarity(TagsGroup a, TagsGroup b) {
             int result = 0;
             for (int i = 0; i < TagsGroupLength; i++) {
-                if (a.InnerTags[i] && a.InnerTags[i] == b.InnerTags[i])
+                if (a.InnerTags[i] && b.InnerTags[i])
                     result++;
             }
             return result;
