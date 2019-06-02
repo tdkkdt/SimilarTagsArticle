@@ -84,7 +84,7 @@ namespace SimilarTagsCalculator {
 #if DEBUG
             DoTests();
 #else
-            BenchmarkRunner.Run<BranchPredictionBenchmark>();
+            BenchmarkRunner.Run<Benchmark>();
 #endif
         }
 
@@ -260,14 +260,34 @@ namespace SimilarTagsCalculator {
     }
 
     public class TagsGroup {
+        static readonly byte[] CountOfSettedBits = GenerateCountOfSettedBits();
+
+        static byte[] GenerateCountOfSettedBits() {
+            byte[] result = new byte[256];
+            int[] b = new int[8];
+            for (int i = 1; i < 256; i++) {
+                int settedBitsCount = 0;
+                int m = 1;
+                for (int j = 0; j < 8; j++) {
+                    b[j] += m;
+                    m = b[j] >> 1;
+                    b[j] = b[j] & 1;
+                    settedBitsCount += b[j];
+                }
+                result[i] = (byte) settedBitsCount;
+            }
+            return result;
+        }
+
         public const int TagsGroupLength = 4096;
+        const int BucketSize = 8;
         byte[] InnerTags { get; }
 
         public static int MeasureSimilarity(TagsGroup a, TagsGroup b) {
             int result = 0;
-            for (int i = 0; i < TagsGroupLength; i++) {
+            for (int i = 0; i < TagsGroupLength / BucketSize; i++) {
                 int t = a.InnerTags[i] & b.InnerTags[i];
-                result += t;
+                result += CountOfSettedBits[t];
             }
             return result;
         }
@@ -278,9 +298,13 @@ namespace SimilarTagsCalculator {
             if (innerTags.Length != TagsGroupLength) {
                 throw new ArgumentException(nameof(innerTags));
             }
-            InnerTags = new byte[TagsGroupLength];
-            for (int i = 0; i < TagsGroupLength; i++) {
-                InnerTags[i] = (byte) (innerTags[i] ? 1 : 0);
+            int index = 0;
+            InnerTags = new byte[TagsGroupLength / BucketSize];
+            for (int i = 0; i < TagsGroupLength / BucketSize; i++) {
+                for (int j = 0; j < BucketSize; j++, index++) {
+                    InnerTags[i] <<= 1;
+                    InnerTags[i] += (byte) (innerTags[index] ? 1 : 0);
+                }
             }
         }
     }
