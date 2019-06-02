@@ -85,6 +85,7 @@ namespace SimilarTagsCalculator {
             DoTests();
 #else
             BenchmarkRunner.Run<Benchmark>();
+            //BenchmarkRunner.Run<BranchPredictionBenchmark>();
 #endif
         }
 
@@ -280,14 +281,17 @@ namespace SimilarTagsCalculator {
         }
 
         public const int TagsGroupLength = 4096;
-        const int BucketSize = 8;
-        byte[] InnerTags { get; }
+        const int BucketSize = 64;
+        ulong[] InnerTags { get; }
 
         public static int MeasureSimilarity(TagsGroup a, TagsGroup b) {
             int result = 0;
             for (int i = 0; i < TagsGroupLength / BucketSize; i++) {
-                int t = a.InnerTags[i] & b.InnerTags[i];
-                result += CountOfSettedBits[t];
+                ulong t = a.InnerTags[i] & b.InnerTags[i];
+                for (int j = 0; j < BucketSize / 8; j++) {
+                    result += CountOfSettedBits[t & 255];
+                    t >>= 8;
+                }
             }
             return result;
         }
@@ -299,7 +303,7 @@ namespace SimilarTagsCalculator {
                 throw new ArgumentException(nameof(innerTags));
             }
             int index = 0;
-            InnerTags = new byte[TagsGroupLength / BucketSize];
+            InnerTags = new ulong[TagsGroupLength / BucketSize];
             for (int i = 0; i < TagsGroupLength / BucketSize; i++) {
                 for (int j = 0; j < BucketSize; j++, index++) {
                     InnerTags[i] <<= 1;
