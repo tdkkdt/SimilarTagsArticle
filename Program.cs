@@ -288,10 +288,21 @@ namespace SimilarTagsCalculator {
             int result = 0;
             for (int i = 0; i < TagsGroupLength / BucketSize; i++) {
                 ulong t = a.InnerTags[i] & b.InnerTags[i];
-                for (int j = 0; j < BucketSize / 8; j++) {
-                    result += CountOfSettedBits[t & 255];
-                    t >>= 8;
-                }
+                result += CountOfSettedBits[t & 255];
+                t >>= 8;
+                result += CountOfSettedBits[t & 255];
+                t >>= 8;
+                result += CountOfSettedBits[t & 255];
+                t >>= 8;
+                result += CountOfSettedBits[t & 255];
+                t >>= 8;
+                result += CountOfSettedBits[t & 255];
+                t >>= 8;
+                result += CountOfSettedBits[t & 255];
+                t >>= 8;
+                result += CountOfSettedBits[t & 255];
+                t >>= 8;
+                result += CountOfSettedBits[t & 255];
             }
             return result;
         }
