@@ -261,13 +261,13 @@ namespace SimilarTagsCalculator {
 
     public class TagsGroup {
         public const int TagsGroupLength = 4096;
-        bool[] InnerTags { get; }
+        byte[] InnerTags { get; }
 
         public static int MeasureSimilarity(TagsGroup a, TagsGroup b) {
             int result = 0;
             for (int i = 0; i < TagsGroupLength; i++) {
-                if (a.InnerTags[i] && b.InnerTags[i])
-                    result++;
+                int t = a.InnerTags[i] & b.InnerTags[i];
+                result += t;
             }
             return result;
         }
@@ -278,7 +278,10 @@ namespace SimilarTagsCalculator {
             if (innerTags.Length != TagsGroupLength) {
                 throw new ArgumentException(nameof(innerTags));
             }
-            InnerTags = innerTags;
+            InnerTags = new byte[TagsGroupLength];
+            for (int i = 0; i < TagsGroupLength; i++) {
+                InnerTags[i] = (byte) (innerTags[i] ? 1 : 0);
+            }
         }
     }
 
