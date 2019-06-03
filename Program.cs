@@ -261,25 +261,6 @@ namespace SimilarTagsCalculator {
     }
 
     public class TagsGroup {
-        static readonly byte[] CountOfSettedBits = GenerateCountOfSettedBits();
-
-        static byte[] GenerateCountOfSettedBits() {
-            byte[] result = new byte[256];
-            int[] b = new int[8];
-            for (int i = 1; i < 256; i++) {
-                int settedBitsCount = 0;
-                int m = 1;
-                for (int j = 0; j < 8; j++) {
-                    b[j] += m;
-                    m = b[j] >> 1;
-                    b[j] = b[j] & 1;
-                    settedBitsCount += b[j];
-                }
-                result[i] = (byte) settedBitsCount;
-            }
-            return result;
-        }
-
         public const int TagsGroupLength = 4096;
         const int BucketSize = 64;
         ulong[] InnerTags { get; }
@@ -288,21 +269,7 @@ namespace SimilarTagsCalculator {
             int result = 0;
             for (int i = 0; i < TagsGroupLength / BucketSize; i++) {
                 ulong t = a.InnerTags[i] & b.InnerTags[i];
-                result += CountOfSettedBits[t & 255];
-                t >>= 8;
-                result += CountOfSettedBits[t & 255];
-                t >>= 8;
-                result += CountOfSettedBits[t & 255];
-                t >>= 8;
-                result += CountOfSettedBits[t & 255];
-                t >>= 8;
-                result += CountOfSettedBits[t & 255];
-                t >>= 8;
-                result += CountOfSettedBits[t & 255];
-                t >>= 8;
-                result += CountOfSettedBits[t & 255];
-                t >>= 8;
-                result += CountOfSettedBits[t & 255];
+                result += (int) System.Runtime.Intrinsics.X86.Popcnt.X64.PopCount(t);
             }
             return result;
         }
