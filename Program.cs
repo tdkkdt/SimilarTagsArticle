@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 
@@ -10,7 +11,8 @@ namespace SimilarTagsCalculator {
         List,
         SortedSet,
         Heap,
-        Count
+        Count,
+        MultiThread
     }
 
     [MemoryDiagnoser]
@@ -21,10 +23,10 @@ namespace SimilarTagsCalculator {
         TagsGroup randomValue;
         TagsGroup allTagsTrue;
 
-        [Params(SortingAlgorithm.List, SortingAlgorithm.SortedSet, SortingAlgorithm.Heap, SortingAlgorithm.Count)]
+        [Params(SortingAlgorithm.MultiThread /*SortingAlgorithm.List, SortingAlgorithm.SortedSet, SortingAlgorithm.Heap, SortingAlgorithm.Count*/)]
         public SortingAlgorithm SortingAlgorithm { get; set; }
 
-        [Params(250000, 1000000)]
+        [Params(/*250000, */1000000)]
         public int GroupsCount { get; set; }
 
         [GlobalSetup]
@@ -55,6 +57,8 @@ namespace SimilarTagsCalculator {
                     return randomCalculator.GetFiftyMostSimilarGroupsHeap(randomValue);
                 case SortingAlgorithm.Count:
                     return randomCalculator.GetFiftyMostSimilarGroupsCount(randomValue);
+                case SortingAlgorithm.MultiThread:
+                    return randomCalculator.GetFiftyMostSimilarGroupsMultiThread(randomValue);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -71,6 +75,8 @@ namespace SimilarTagsCalculator {
                     return ascendantCalculator.GetFiftyMostSimilarGroupsHeap(allTagsTrue);
                 case SortingAlgorithm.Count:
                     return ascendantCalculator.GetFiftyMostSimilarGroupsCount(allTagsTrue);
+                case SortingAlgorithm.MultiThread:
+                    return ascendantCalculator.GetFiftyMostSimilarGroupsMultiThread(allTagsTrue);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -87,6 +93,8 @@ namespace SimilarTagsCalculator {
                     return descendantCalculator.GetFiftyMostSimilarGroupsHeap(allTagsTrue);
                 case SortingAlgorithm.Count:
                     return descendantCalculator.GetFiftyMostSimilarGroupsCount(allTagsTrue);
+                case SortingAlgorithm.MultiThread:
+                    return descendantCalculator.GetFiftyMostSimilarGroupsMultiThread(allTagsTrue);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -258,10 +266,11 @@ namespace SimilarTagsCalculator {
         static void TestCore(TagsGroup[] groups, TagsGroup etalon, string testName) {
             var dummyResult = GetDummyResult(groups, etalon);
             SimilarTagsCalculator calculator = new SimilarTagsCalculator(groups);
-            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroups(etalon));
-            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsSortedSet(etalon));
-            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsHeap(etalon));
-            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsCount(etalon));
+            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsMultiThread(etalon));
+//            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroups(etalon));
+//            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsSortedSet(etalon));
+//            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsHeap(etalon));
+//            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsCount(etalon));
             Console.WriteLine($"{testName} passed!");
         }
 
@@ -466,7 +475,7 @@ namespace SimilarTagsCalculator {
 
         public TagsGroup[] GetFiftyMostSimilarGroups(TagsGroup value) {
             const int resultLength = 50;
-            List<TagsSimilarityInfo> list = new List<TagsSimilarityInfo>(50);
+            List<TagsSimilarityInfo> list = new List<TagsSimilarityInfo>(resultLength);
             for (int groupIndex = 0; groupIndex < Groups.Length; groupIndex++) {
                 TagsGroup tagsGroup = Groups[groupIndex];
                 int similarityValue = TagsGroup.MeasureSimilarity(value, tagsGroup);
@@ -485,6 +494,63 @@ namespace SimilarTagsCalculator {
                 result[i] = Groups[list[i].Index];
             }
             return result;
+        }
+
+        public TagsGroup[] GetFiftyMostSimilarGroupsMultiThread(TagsGroup value) {
+            const int resultLength = 50;
+            const int threadsCount = 4;
+            int bucketSize = Groups.Length / threadsCount;
+            Task<List<TagsSimilarityInfo>>[] tasks = new Task<List<TagsSimilarityInfo>>[threadsCount];
+            for (int i = 0; i < threadsCount; i++) {
+                int leftIndex = i * bucketSize;
+                int rightIndex = (i + 1) * bucketSize;
+                tasks[i] = Task<List<TagsSimilarityInfo>>.Factory.StartNew(() => GetFiftyMostSimilarGroupsMultiThreadCore(value, leftIndex, rightIndex));
+            }
+            Task.WaitAll(tasks);
+            List<TagsSimilarityInfo>[] taskResults = new List<TagsSimilarityInfo>[threadsCount];
+            for (int i = 0; i < threadsCount; i++) {
+                taskResults[i] = tasks[i].Result;
+            }
+            return MergeTaskResults(resultLength, threadsCount, taskResults);
+        }
+
+        TagsGroup[] MergeTaskResults(int resultLength, int threadsCount, List<TagsSimilarityInfo>[] taskResults) {
+            TagsGroup[] result = new TagsGroup[resultLength];
+            int[] indices = new int[threadsCount];
+            for (int i = 0; i < resultLength; i++) {
+                int minIndex = 0;
+                TagsSimilarityInfo currentBest = taskResults[minIndex][indices[minIndex]];
+                for (int j = 0; j < threadsCount; j++) {
+                    var current = taskResults[j][indices[j]];
+                    if (current.CompareTo(currentBest) == -1) {
+                        minIndex = j;
+                        currentBest = taskResults[minIndex][indices[minIndex]];
+                    }
+                }
+                int groupIndex = currentBest.Index;
+                result[i] = Groups[groupIndex];
+                indices[minIndex]++;
+            }
+            return result;
+        }
+
+        List<TagsSimilarityInfo> GetFiftyMostSimilarGroupsMultiThreadCore(TagsGroup value, int leftIndex, int rightIndex) {
+            const int resultLength = 50;
+            List<TagsSimilarityInfo> list = new List<TagsSimilarityInfo>(resultLength);
+            for (int groupIndex = leftIndex; groupIndex < rightIndex; groupIndex++) {
+                TagsGroup tagsGroup = Groups[groupIndex];
+                int similarityValue = TagsGroup.MeasureSimilarity(value, tagsGroup);
+                TagsSimilarityInfo newInfo = new TagsSimilarityInfo(groupIndex, similarityValue);
+                if (list.Count == resultLength && list[resultLength - 1].CompareTo(newInfo) == -1) {
+                    continue;
+                }
+                int index = ~list.BinarySearch(newInfo);
+                list.Insert(index, newInfo);
+                if (list.Count > resultLength) {
+                    list.RemoveAt(resultLength);
+                }
+            }
+            return list;
         }
 
         public TagsGroup[] GetFiftyMostSimilarGroupsSortedSet(TagsGroup value) {
