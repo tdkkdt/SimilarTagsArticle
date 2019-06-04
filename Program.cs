@@ -1,10 +1,18 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 
 namespace SimilarTagsCalculator {
+    public enum SortingAlgorithm {
+        List,
+        SortedSet,
+        Heap,
+        Count
+    }
+
     [MemoryDiagnoser]
     public class Benchmark {
         SimilarTagsCalculator randomCalculator;
@@ -13,10 +21,16 @@ namespace SimilarTagsCalculator {
         TagsGroup randomValue;
         TagsGroup allTagsTrue;
 
+        [Params(SortingAlgorithm.List, SortingAlgorithm.SortedSet, SortingAlgorithm.Heap, SortingAlgorithm.Count)]
+        public SortingAlgorithm SortingAlgorithm { get; set; }
+
+        [Params(250000, 1000000)]
+        public int GroupsCount { get; set; }
+
         [GlobalSetup]
         public void GlobalSetup() {
-            randomCalculator = new SimilarTagsCalculator(Program.CreateRandomGroups(1000000));
-            TagsGroup[] ascendantTestGroups = Program.CreateAscendantTestGroups(1000000);
+            randomCalculator = new SimilarTagsCalculator(Program.CreateRandomGroups(GroupsCount));
+            TagsGroup[] ascendantTestGroups = Program.CreateAscendantTestGroups(GroupsCount);
             TagsGroup[] descendantTestGroups = new TagsGroup[ascendantTestGroups.Length];
             Array.Copy(ascendantTestGroups, descendantTestGroups, ascendantTestGroups.Length);
             Array.Reverse(descendantTestGroups);
@@ -32,17 +46,50 @@ namespace SimilarTagsCalculator {
 
         [Benchmark]
         public TagsGroup[] RandomTest() {
-            return randomCalculator.GetFiftyMostSimilarGroups(randomValue);
+            switch (SortingAlgorithm) {
+                case SortingAlgorithm.List:
+                    return randomCalculator.GetFiftyMostSimilarGroups(randomValue);
+                case SortingAlgorithm.SortedSet:
+                    return randomCalculator.GetFiftyMostSimilarGroupsSortedSet(randomValue);
+                case SortingAlgorithm.Heap:
+                    return randomCalculator.GetFiftyMostSimilarGroupsHeap(randomValue);
+                case SortingAlgorithm.Count:
+                    return descendantCalculator.GetFiftyMostSimilarGroupsCount(randomValue);
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
         }
 
         [Benchmark]
         public TagsGroup[] AscendantTest() {
-            return ascendantCalculator.GetFiftyMostSimilarGroups(allTagsTrue);
+            switch (SortingAlgorithm) {
+                case SortingAlgorithm.List:
+                    return ascendantCalculator.GetFiftyMostSimilarGroups(allTagsTrue);
+                case SortingAlgorithm.SortedSet:
+                    return randomCalculator.GetFiftyMostSimilarGroupsSortedSet(allTagsTrue);
+                case SortingAlgorithm.Heap:
+                    return randomCalculator.GetFiftyMostSimilarGroupsHeap(allTagsTrue);
+                case SortingAlgorithm.Count:
+                    return descendantCalculator.GetFiftyMostSimilarGroupsCount(allTagsTrue);
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
         }
-        
+
         [Benchmark]
         public TagsGroup[] DescendantTest() {
-            return descendantCalculator.GetFiftyMostSimilarGroups(allTagsTrue);
+            switch (SortingAlgorithm) {
+                case SortingAlgorithm.List:
+                    return descendantCalculator.GetFiftyMostSimilarGroups(allTagsTrue);
+                case SortingAlgorithm.SortedSet:
+                    return descendantCalculator.GetFiftyMostSimilarGroupsSortedSet(allTagsTrue);
+                case SortingAlgorithm.Heap:
+                    return descendantCalculator.GetFiftyMostSimilarGroupsHeap(allTagsTrue);
+                case SortingAlgorithm.Count:
+                    return descendantCalculator.GetFiftyMostSimilarGroupsCount(allTagsTrue);
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
         }
     }
 
@@ -154,8 +201,8 @@ namespace SimilarTagsCalculator {
 #if DEBUG
             DoTests();
 #else
-            BenchmarkRunner.Run<SortBenchmark>();
-//            BenchmarkRunner.Run<Benchmark>();
+//            BenchmarkRunner.Run<SortBenchmark>();
+            BenchmarkRunner.Run<Benchmark>();
             //BenchmarkRunner.Run<BranchPredictionBenchmark>();
 #endif
         }
@@ -211,7 +258,14 @@ namespace SimilarTagsCalculator {
         static void TestCore(TagsGroup[] groups, TagsGroup etalon, string testName) {
             var dummyResult = GetDummyResult(groups, etalon);
             SimilarTagsCalculator calculator = new SimilarTagsCalculator(groups);
-            var result = calculator.GetFiftyMostSimilarGroups(etalon);
+            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroups(etalon));
+            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsSortedSet(etalon));
+            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsHeap(etalon));
+            TestCoreCore(dummyResult, calculator.GetFiftyMostSimilarGroupsCount(etalon));
+            Console.WriteLine($"{testName} passed!");
+        }
+
+        static void TestCoreCore(TagsGroup[] dummyResult, TagsGroup[] result) {
             if (dummyResult.Length != result.Length) {
                 throw new Exception("Test failed");
             }
@@ -220,7 +274,6 @@ namespace SimilarTagsCalculator {
                     throw new Exception("Test failed");
                 }
             }
-            Console.WriteLine($"{testName} passed!");
         }
 
         static TagsGroup[] GetDummyResult(TagsGroup[] groups, TagsGroup etalon) {
@@ -413,7 +466,7 @@ namespace SimilarTagsCalculator {
 
         public TagsGroup[] GetFiftyMostSimilarGroups(TagsGroup value) {
             const int resultLength = 50;
-            List<TagsSimilarityInfo> list = new List<TagsSimilarityInfo>();
+            List<TagsSimilarityInfo> list = new List<TagsSimilarityInfo>(50);
             for (int groupIndex = 0; groupIndex < Groups.Length; groupIndex++) {
                 TagsGroup tagsGroup = Groups[groupIndex];
                 int similarityValue = TagsGroup.MeasureSimilarity(value, tagsGroup);
@@ -432,6 +485,146 @@ namespace SimilarTagsCalculator {
                 result[i] = Groups[list[i].Index];
             }
             return result;
+        }
+
+        public TagsGroup[] GetFiftyMostSimilarGroupsSortedSet(TagsGroup value) {
+            const int resultLength = 50;
+            SortedSet<TagsSimilarityInfo> sortedSet = new SortedSet<TagsSimilarityInfo>();
+            for (int groupIndex = 0; groupIndex < Groups.Length; groupIndex++) {
+                TagsGroup tagsGroup = Groups[groupIndex];
+                int similarityValue = TagsGroup.MeasureSimilarity(value, tagsGroup);
+                TagsSimilarityInfo newInfo = new TagsSimilarityInfo(groupIndex, similarityValue);
+                if (sortedSet.Count == resultLength && sortedSet.Max.CompareTo(newInfo) == -1) {
+                    continue;
+                }
+                sortedSet.Add(newInfo);
+                if (sortedSet.Count > resultLength) {
+                    sortedSet.Remove(sortedSet.Max);
+                }
+            }
+            TagsGroup[] result = new TagsGroup[resultLength];
+            int i = 0;
+            foreach (var info in sortedSet) {
+                result[i++] = Groups[info.Index];
+            }
+            return result;
+        }
+
+        public TagsGroup[] GetFiftyMostSimilarGroupsHeap(TagsGroup value) {
+            const int resultLength = 50;
+            BinaryHeap<TagsSimilarityInfo> binaryHeap = new BinaryHeap<TagsSimilarityInfo>(50);
+            for (int groupIndex = 0; groupIndex < Groups.Length; groupIndex++) {
+                TagsGroup tagsGroup = Groups[groupIndex];
+                int similarityValue = TagsGroup.MeasureSimilarity(value, tagsGroup);
+                TagsSimilarityInfo newInfo = new TagsSimilarityInfo(groupIndex, similarityValue);
+                if (binaryHeap.Count == resultLength && binaryHeap.Max.CompareTo(newInfo) == -1) {
+                    continue;
+                }
+                binaryHeap.Add(newInfo);
+                if (binaryHeap.Count > resultLength) {
+                    binaryHeap.RemoveMax();
+                }
+            }
+            TagsGroup[] result = new TagsGroup[resultLength];
+            List<TagsSimilarityInfo> list = new List<TagsSimilarityInfo>(binaryHeap);
+            list.Sort();
+            for (int i = 0; i < resultLength; i++) {
+                result[i] = Groups[list[i].Index];
+                binaryHeap.RemoveMax();
+            }
+            return result;
+        }
+
+        public TagsGroup[] GetFiftyMostSimilarGroupsCount(TagsGroup value) {
+            const int resultLength = 50;
+            List<int>[] buckets = new List<int>[TagsGroup.TagsGroupLength + 1];
+            for (int groupIndex = 0; groupIndex < Groups.Length; groupIndex++) {
+                var tagsGroup = Groups[groupIndex];
+                int similarityValue = TagsGroup.MeasureSimilarity(value, tagsGroup);
+                List<int> bucket = buckets[similarityValue];
+                if (bucket == null) {
+                    bucket = new List<int>();
+                    buckets[similarityValue] = bucket;
+                }
+                bucket.Add(groupIndex);
+            }
+            TagsGroup[] result = new TagsGroup[resultLength];
+            for (int i = TagsGroup.TagsGroupLength, j = 0; i >= 0 && j < resultLength; i--) {
+                if (buckets[i] == null)
+                    continue;
+                for (int index = 0; index < buckets[i].Count && j < resultLength; index++) {
+                    int groupIndex = buckets[i][index];
+                    result[j++] = Groups[groupIndex];
+                }
+            }
+            return result;
+        }
+    }
+
+    public class BinaryHeap<T>:IEnumerable<T> where T : IComparable<T> {
+        readonly List<T> innerList;
+
+        public BinaryHeap(int capacity) {
+            innerList = new List<T>(capacity);
+        }
+
+        public int Count => innerList.Count;
+
+        public T Max => innerList[0];
+
+        public void Add(T value) {
+            innerList.Add(value);
+            int i = Count - 1;
+            int parent = (i - 1) >> 1;
+
+            while (i > 0 && innerList[parent].CompareTo(innerList[i]) == -1) {
+                Swap(i, parent);
+
+                i = parent;
+                parent = (i - 1) >> 1;
+            }
+        }
+
+        void Swap(int a, int b) {
+            T temp = innerList[a];
+            innerList[a] = innerList[b];
+            innerList[b] = temp;
+        }
+
+        void Heapify(int i) {
+            for (;;) {
+                int leftChild = (i << 1) | 1;
+                int rightChild = (i + 1) << 1;
+                int largestChild = i;
+
+                if (leftChild < Count && innerList[leftChild].CompareTo(innerList[largestChild]) == 1) {
+                    largestChild = leftChild;
+                }
+
+                if (rightChild < Count && innerList[rightChild].CompareTo(innerList[largestChild]) == 1) {
+                    largestChild = rightChild;
+                }
+
+                if (largestChild == i) {
+                    break;
+                }
+                Swap(i, largestChild);
+                i = largestChild;
+            }
+        }
+
+        public void RemoveMax() {
+            innerList[0] = innerList[Count - 1];
+            innerList.RemoveAt(Count - 1);
+            Heapify(0);
+        }
+
+        public IEnumerator<T> GetEnumerator() {
+            return innerList.GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() {
+            return ((IEnumerable) innerList).GetEnumerator();
         }
     }
 }
