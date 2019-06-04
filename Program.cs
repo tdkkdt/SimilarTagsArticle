@@ -75,6 +75,76 @@ namespace SimilarTagsCalculator {
 
     }
 
+    public class SortBenchmark {
+        [Params(50, 100, 1000, 10000, 100000, 1000000)]
+        public int ItemsCount { get; set; }
+
+        SimilarTagsCalculator.TagsSimilarityInfo[] randomGroups;
+        SimilarTagsCalculator.TagsSimilarityInfo[] ascendantGroups;
+        SimilarTagsCalculator.TagsSimilarityInfo[] descendantGroups;
+
+        
+        
+        [GlobalSetup]
+        public void GlobalSetup() {
+            randomGroups = CalcTagsSimilarityInfo(Program.CreateAscendantTestGroups(ItemsCount));
+            ascendantGroups = CalcTagsSimilarityInfo(Program.CreateAscendantTestGroups(ItemsCount));
+            descendantGroups = new SimilarTagsCalculator.TagsSimilarityInfo[ItemsCount];
+            Array.Copy(ascendantGroups, descendantGroups, ItemsCount);
+            Array.Reverse(descendantGroups);
+        }
+
+        SimilarTagsCalculator.TagsSimilarityInfo[] CalcTagsSimilarityInfo(TagsGroup[] tagsGroups) {
+            SimilarTagsCalculator.TagsSimilarityInfo[] result = new SimilarTagsCalculator.TagsSimilarityInfo[tagsGroups.Length];
+            TagsGroup tagsGroup = new TagsGroup(Program.CreateAllTagsTrue());
+            for (int i = 0; i < tagsGroups.Length; i++) {
+                result[i] = new SimilarTagsCalculator.TagsSimilarityInfo(i, TagsGroup.MeasureSimilarity(tagsGroup, tagsGroups[i]));
+            }
+            return result;
+        }
+
+        static SimilarTagsCalculator.TagsSimilarityInfo[] ArraySort(SimilarTagsCalculator.TagsSimilarityInfo[] array) {
+            SimilarTagsCalculator.TagsSimilarityInfo[] result = new SimilarTagsCalculator.TagsSimilarityInfo[array.Length];
+            Array.Copy(array, result, array.Length);
+            Array.Sort(result);
+            return result;
+        }
+
+        static SimilarTagsCalculator.TagsSimilarityInfo[] CountSort(SimilarTagsCalculator.TagsSimilarityInfo[] array) {
+            List<SimilarTagsCalculator.TagsSimilarityInfo>[] list = new List<SimilarTagsCalculator.TagsSimilarityInfo>[TagsGroup.TagsGroupLength + 1];
+            foreach (var tagsSimilarityInfo in array) {
+                List<SimilarTagsCalculator.TagsSimilarityInfo> l = list[tagsSimilarityInfo.Similarity];
+                if (l == null) {
+                    l = new List<SimilarTagsCalculator.TagsSimilarityInfo>();
+                    list[tagsSimilarityInfo.Similarity] = l;
+                }
+                l.Add(tagsSimilarityInfo);
+            }
+            SimilarTagsCalculator.TagsSimilarityInfo[] result = new SimilarTagsCalculator.TagsSimilarityInfo[array.Length];
+            for (int i = TagsGroup.TagsGroupLength, j = 0; i >= 0; i--) {
+                if (list[i] == null)
+                    continue;
+                foreach (var info in list[i]) {
+                    result[j++] = info;
+                }
+            }
+            return result;
+        }
+
+        [Benchmark]
+        public SimilarTagsCalculator.TagsSimilarityInfo[] RandomArraySort() => ArraySort(randomGroups);
+        [Benchmark]
+        public SimilarTagsCalculator.TagsSimilarityInfo[] RandomCountSort() => CountSort(randomGroups);
+        [Benchmark]
+        public SimilarTagsCalculator.TagsSimilarityInfo[] AscendantArraySort() => ArraySort(ascendantGroups);
+        [Benchmark]
+        public SimilarTagsCalculator.TagsSimilarityInfo[] AscendantCountSort() => CountSort(ascendantGroups);
+        [Benchmark]
+        public SimilarTagsCalculator.TagsSimilarityInfo[] DescendantArraySort() => ArraySort(descendantGroups);
+        [Benchmark]
+        public SimilarTagsCalculator.TagsSimilarityInfo[] DescendantCountSort() => CountSort(descendantGroups);
+    }
+
     class Program {
         static Random rnd = new Random(31337);
         const int resultLength = 50;
@@ -84,7 +154,8 @@ namespace SimilarTagsCalculator {
 #if DEBUG
             DoTests();
 #else
-            BenchmarkRunner.Run<Benchmark>();
+            BenchmarkRunner.Run<SortBenchmark>();
+//            BenchmarkRunner.Run<Benchmark>();
             //BenchmarkRunner.Run<BranchPredictionBenchmark>();
 #endif
         }
@@ -291,8 +362,8 @@ namespace SimilarTagsCalculator {
         }
     }
 
-    class SimilarTagsCalculator {
-        struct TagsSimilarityInfo : IComparable<TagsSimilarityInfo>, IComparable {
+    public class SimilarTagsCalculator {
+        public struct TagsSimilarityInfo : IComparable<TagsSimilarityInfo>, IComparable {
             public int Index { get; }
 
             public int Similarity { get; }
