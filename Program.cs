@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -54,7 +54,7 @@ namespace SimilarTagsCalculator {
                 case SortingAlgorithm.Heap:
                     return randomCalculator.GetFiftyMostSimilarGroupsHeap(randomValue);
                 case SortingAlgorithm.Count:
-                    return descendantCalculator.GetFiftyMostSimilarGroupsCount(randomValue);
+                    return randomCalculator.GetFiftyMostSimilarGroupsCount(randomValue);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -66,11 +66,11 @@ namespace SimilarTagsCalculator {
                 case SortingAlgorithm.List:
                     return ascendantCalculator.GetFiftyMostSimilarGroups(allTagsTrue);
                 case SortingAlgorithm.SortedSet:
-                    return randomCalculator.GetFiftyMostSimilarGroupsSortedSet(allTagsTrue);
+                    return ascendantCalculator.GetFiftyMostSimilarGroupsSortedSet(allTagsTrue);
                 case SortingAlgorithm.Heap:
-                    return randomCalculator.GetFiftyMostSimilarGroupsHeap(allTagsTrue);
+                    return ascendantCalculator.GetFiftyMostSimilarGroupsHeap(allTagsTrue);
                 case SortingAlgorithm.Count:
-                    return descendantCalculator.GetFiftyMostSimilarGroupsCount(allTagsTrue);
+                    return ascendantCalculator.GetFiftyMostSimilarGroupsCount(allTagsTrue);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
